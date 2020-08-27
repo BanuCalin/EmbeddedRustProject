@@ -9,11 +9,14 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
 
 use cortex_m::asm;
 use cortex_m_rt::entry;
+use cortex_m_semihosting::{debug, hprintln};
+use stm32f4::stm32f446;
 
 #[entry]
 fn main() -> ! {
-    asm::nop(); // To not have main optimize to abort in release mode, remove when you add code
-
+    // asm::nop(); // To not have main optimize to abort in release mode, remove when you add code
+    hprintln!("Hello, world").unwrap();
+    // debug::exit(debug::EXIT_SUCCESS);
     loop {
         // your code goes here
     }
