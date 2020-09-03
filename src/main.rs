@@ -1,40 +1,13 @@
-// #![no_std]
-// #![no_main]
-
-// // pick a panicking behavior
-// use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
-// // use panic_abort as _; // requires nightly
-// // use panic_itm as _; // logs messages over ITM; requires ITM support
-// // use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
-
-// use cortex_m::asm;
-// use cortex_m_rt::entry;
-// use cortex_m_semihosting::{debug, hprintln};
-// use stm32f4::stm32f446;
-
-// #[entry]
-// fn main() -> ! {
-//     // asm::nop(); // To not have main optimize to abort in release mode, remove when you add code
-//     hprintln!("Hello, world").unwrap();
-//     // debug::exit(debug::EXIT_SUCCESS);
-//     loop {
-//         // your code goes here
-//     }
-// }
-
 #![deny(unsafe_code)]
 #![no_main]
 #![no_std]
 
-// Halt on panic
-#[allow(unused_extern_crates)] // NOTE(allow) bug rust-lang/rust#53964
-extern crate panic_halt; // panic handler
-
+use panic_halt as _;
 use cortex_m;
 use cortex_m_rt::entry;
 use stm32f4xx_hal as hal;
 
-use crate::hal::{prelude::*, stm32};
+use crate::hal::{prelude::*, stm32, serial};
 
 #[entry]
 fn main() -> ! {
@@ -44,39 +17,26 @@ fn main() -> ! {
     ) {
         // Set up the LED. On the Nucleo-446RE it's connected to pin PA5.
         let gpioa = dp.GPIOA.split();
-        let gpiob = dp.GPIOB.split();
 
         let mut led1 = gpioa.pa5.into_open_drain_output();
-        let mut led2 = gpioa.pa6.into_open_drain_output();
-        let mut led3 = gpioa.pa7.into_open_drain_output();
-        let mut led4 = gpiob.pb6.into_open_drain_output();
 
-        let mut sw1 = gpioa.pa1.into_pull_down_input();
-
+        led1.set_high().unwrap();
+        
+        let tx = gpioa.pa2.into_alternate_af7();
+        let rx = gpioa.pa3.into_alternate_af7();
         // Set up the system clock. We want to run at 48MHz for this one.
         let rcc = dp.RCC.constrain();
         let clocks = rcc.cfgr.sysclk(48.mhz()).freeze();
+        let cfg = serial::config::Config::default().baudrate(115_200.bps());
 
-        // Create a delay abstraction based on SysTick
-        let mut delay = hal::delay::Delay::new(cp.SYST, clocks);
+        let mut usart2 = serial::Serial::usart2(dp.USART2, (tx, rx), cfg, clocks).unwrap();
 
         loop {
-            // On for 1s, off for 1s.
-            led1.set_high().unwrap();
-            led2.set_high().unwrap();
-            led3.set_high().unwrap();
-            // led4.set_high().unwrap();
-
-            delay.delay_ms(1000_u32);
-
-            led1.set_low().unwrap();
-            led2.set_low().unwrap();
-            led3.set_low().unwrap();
-            // led4.set_low().unwrap();
-
-            delay.delay_ms(1000_u32);
-            if sw1.is_low().unwrap() {
-                led4.toggle().unwrap();
+            if usart2.is_rxne() {
+                led1.set_low().unwrap();
+                let w = usart2.read().unwrap();
+                usart2.write(w);
+                led1.set_high().unwrap();
             }
         }
     }
